@@ -2,6 +2,7 @@ package simple
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -28,21 +29,27 @@ func (st SimpleStrategy) RunCommand() {
 func (st SimpleStrategy) curl() {
 	timer := prometheus.NewTimer(st.S.Metrics.RequestDuration)
 
-	req, err := http.NewRequest("GET", st.S.Url, nil)
-	if err != nil {
-		st.S.Metrics.ErrorRequests.WithLabelValues("create").Inc()
-		logrus.Errorf("Error creating url: %s - %s", st.S.Url, err)
+	client := http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout: time.Duration(st.S.Timeout),
+			}).DialContext,
+		},
 	}
-
-	ctx, cancel := context.WithTimeout(req.Context(), time.Duration(st.S.Timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(st.S.Timeout)*time.Second)
 	defer cancel()
 
-	req = req.WithContext(ctx)
-
-	client := http.DefaultClient
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, st.S.Url, nil)
 	res, err := client.Do(req)
+	if res != nil {
+		defer res.Body.Close()
+	}
+	// res, err := http.Get(st.S.Url)
 
-	if err != nil {
+	if e, ok := err.(net.Error); ok && e.Timeout() {
+		st.S.Metrics.ErrorRequests.WithLabelValues("timeout").Inc()
+		logrus.Errorf("Error getting url: %s - %s", st.S.Url, err)
+	} else if err != nil {
 		st.S.Metrics.ErrorRequests.WithLabelValues(strconv.Itoa(res.StatusCode)).Inc()
 		logrus.Errorf("Error getting url: %s - %s", st.S.Url, err)
 	}
