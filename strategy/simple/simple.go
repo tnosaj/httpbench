@@ -38,6 +38,7 @@ func (st SimpleStrategy) curl() {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, st.S.Url, nil)
 	if err != nil {
 		logrus.Errorf("error creating request %s", err)
+		return
 	}
 
 	res, err := client.Do(req)
@@ -49,9 +50,12 @@ func (st SimpleStrategy) curl() {
 	if e, ok := err.(net.Error); ok && e.Timeout() {
 		st.S.Metrics.ErrorRequests.WithLabelValues("timeout").Inc()
 		logrus.Errorf("Error getting url timeout: %s - %s", st.S.Url, err)
-	} else if err != nil {
+	} else if err == nil && res.StatusCode != http.StatusOK {
 		st.S.Metrics.ErrorRequests.WithLabelValues(strconv.Itoa(res.StatusCode)).Inc()
 		logrus.Errorf("Error getting url reponsecode: %s - %s", st.S.Url, err)
+	} else if err != nil {
+		st.S.Metrics.ErrorRequests.WithLabelValues("unknown").Inc()
+		logrus.Errorf("Error from an unknown source: %s", err)
 	}
 	timer.ObserveDuration()
 }

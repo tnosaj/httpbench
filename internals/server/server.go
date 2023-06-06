@@ -28,7 +28,7 @@ func NewHttpbenchServer(settings internals.Settings) HttpbenchServer {
 
 	ErrorReuests := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "requerst_errors",
+			Name: "request_errors",
 			Help: "The total number of failed requests",
 		},
 		[]string{"code"},
